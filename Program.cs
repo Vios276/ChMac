@@ -35,11 +35,13 @@ namespace ChMac
 
                         if (instanceId?.Equals(guid) == true)
                         {
-                            subKey.SetValue("NetworkAddress", "FCAA1472FBD2"); //FC-AA-14-72-FB-D2
+                            var rndMacAdress = GetRandomMacAddress();
+                            Console.WriteLine("New MAC Address: " + rndMacAdress);
+                            subKey.SetValue("NetworkAddress", rndMacAdress); 
 
                             using (var networkAddressKey = subKey.OpenSubKey("Ndi", true).OpenSubKey("Params", true).OpenSubKey("NetworkAddress", true))
                             {
-                                networkAddressKey.SetValue(string.Empty, "FCAA1472FBD2"); //FC-AA-14-72-FB-D2
+                                networkAddressKey.SetValue(string.Empty, rndMacAdress); 
                                 networkAddressKey.SetValue("Param Desc", "Network Address");
                             }
                         }
@@ -69,6 +71,15 @@ namespace ChMac
             Console.WriteLine("Current MAC: " + GetCurrentOnlineNetworkInterface().GetPhysicalAddress());
 
             Console.ReadLine();
+        }
+
+        public static string GetRandomMacAddress()
+        {
+            var random = new Random();
+            var buffer = new byte[6];
+            random.NextBytes(buffer);
+            var result = String.Concat(buffer.Select(x => string.Format("{0}", x.ToString("X2"))).ToArray());
+            return result;
         }
 
         private static NetworkInterface GetCurrentOnlineNetworkInterface()
