@@ -70,7 +70,7 @@ namespace ChMac
 
             Console.WriteLine("Current MAC: " + GetCurrentOnlineNetworkInterface().GetPhysicalAddress());
 
-            Console.ReadLine();
+            Environment.Exit(0);
         }
 
         public static string GetRandomMacAddress()
