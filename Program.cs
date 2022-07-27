@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Management;
+using System.Net.Http;
 using System.Net.NetworkInformation;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -13,64 +14,21 @@ namespace ChMac
 {
     internal class Program
     {
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            var targetInterface = GetCurrentOnlineNetworkInterface();
-
-            Console.WriteLine("Previous MAC: " + targetInterface.GetPhysicalAddress());
-
-            var guid = targetInterface.Id;
-
-            using (var reg = Registry.LocalMachine.OpenSubKey("SYSTEM").OpenSubKey("CurrentControlSet").OpenSubKey("Control").OpenSubKey("Class").OpenSubKey("{4d36e972-e325-11ce-bfc1-08002be10318}"))
+            try
             {
-                var subKeyNames = reg.GetSubKeyNames();
-                foreach (var subKeyName in subKeyNames)
-                {
-                    if (!Regex.IsMatch(subKeyName, @"\d{4}"))
-                        continue;
-
-                    using (var subKey = reg.OpenSubKey(subKeyName, true))
-                    {
-                        var instanceId = subKey.GetValue("NetCfgInstanceId");
-
-                        if (instanceId?.Equals(guid) == true)
-                        {
-                            var rndMacAdress = GetRandomMacAddress();
-                            Console.WriteLine("New MAC Address: " + rndMacAdress);
-                            subKey.SetValue("NetworkAddress", rndMacAdress); 
-
-                            using (var networkAddressKey = subKey.OpenSubKey("Ndi", true).OpenSubKey("Params", true).OpenSubKey("NetworkAddress", true))
-                            {
-                                networkAddressKey.SetValue(string.Empty, rndMacAdress); 
-                                networkAddressKey.SetValue("Param Desc", "Network Address");
-                            }
-                        }
-                    }
-                }
+                ChangeMacAddressAsync();
+                await CheckInternetAsync();
             }
-
-            var wmiQuery = new SelectQuery($"SELECT * FROM Win32_NetworkAdapter WHERE GUID='{guid}'");
-
-            var searchProcedure = new ManagementObjectSearcher(wmiQuery);
-
-            foreach (var item in searchProcedure.Get())
+            catch (Exception e)
             {
-                var obj = (ManagementObject)item;
-
-                obj.InvokeMethod("Disable", null);
-
-                while (GetCurrentOnlineNetworkInterface() != null)
-                    Thread.Sleep(1000);
-
-                obj.InvokeMethod("Enable", null);
-
-                while (GetCurrentOnlineNetworkInterface() == null)
-                    Thread.Sleep(1000);
+                RestoreMacAddressAsync();
             }
-
-            Console.WriteLine("Current MAC: " + GetCurrentOnlineNetworkInterface().GetPhysicalAddress());
-
-            Environment.Exit(0);
+            finally
+            {
+                Environment.Exit(0);
+            }
         }
 
         public static string GetRandomMacAddress()
@@ -98,6 +56,127 @@ namespace ChMac
             }
 
             return null;
+        }
+
+        private static void ChangeMacAddressAsync()
+        {
+            var targetInterface = GetCurrentOnlineNetworkInterface();
+
+            Console.WriteLine("Previous MAC: " + targetInterface.GetPhysicalAddress());
+
+            var guid = targetInterface.Id;
+
+            using (var reg = Registry.LocalMachine.OpenSubKey("SYSTEM").OpenSubKey("CurrentControlSet").OpenSubKey("Control").OpenSubKey("Class").OpenSubKey("{4d36e972-e325-11ce-bfc1-08002be10318}"))
+            {
+                var subKeyNames = reg.GetSubKeyNames();
+                foreach (var subKeyName in subKeyNames)
+                {
+                    if (!Regex.IsMatch(subKeyName, @"\d{4}"))
+                        continue;
+
+                    using (var subKey = reg.OpenSubKey(subKeyName, true))
+                    {
+                        var instanceId = subKey.GetValue("NetCfgInstanceId");
+
+                        if (instanceId?.Equals(guid) == true)
+                        {
+                            var rndMacAdress = GetRandomMacAddress();
+                            Console.WriteLine("New MAC Address: " + rndMacAdress);
+                            subKey.SetValue("NetworkAddress", rndMacAdress);
+
+                            using (var networkAddressKey = subKey.OpenSubKey("Ndi", true).OpenSubKey("Params", true).OpenSubKey("NetworkAddress", true))
+                            {
+                                networkAddressKey.SetValue(string.Empty, rndMacAdress);
+                                networkAddressKey.SetValue("Param Desc", "Network Address");
+                            }
+                        }
+                    }
+                }
+            }
+
+            var wmiQuery = new SelectQuery($"SELECT * FROM Win32_NetworkAdapter WHERE GUID='{guid}'");
+
+            var searchProcedure = new ManagementObjectSearcher(wmiQuery);
+
+            foreach (var item in searchProcedure.Get())
+            {
+                var obj = (ManagementObject)item;
+
+                obj.InvokeMethod("Disable", null);
+
+                while (GetCurrentOnlineNetworkInterface() != null)
+                    Thread.Sleep(1000);
+
+                obj.InvokeMethod("Enable", null);
+
+                while (GetCurrentOnlineNetworkInterface() == null)
+                    Thread.Sleep(1000);
+            }
+
+            Console.WriteLine("Current MAC: " + GetCurrentOnlineNetworkInterface().GetPhysicalAddress());
+        }
+
+        private static void RestoreMacAddressAsync()
+        {
+            var targetInterface = GetCurrentOnlineNetworkInterface();
+
+            Console.WriteLine("Previous MAC: " + targetInterface.GetPhysicalAddress());
+
+            var guid = targetInterface.Id;
+
+            using (var reg = Registry.LocalMachine.OpenSubKey("SYSTEM").OpenSubKey("CurrentControlSet").OpenSubKey("Control").OpenSubKey("Class").OpenSubKey("{4d36e972-e325-11ce-bfc1-08002be10318}"))
+            {
+                var subKeyNames = reg.GetSubKeyNames();
+                foreach (var subKeyName in subKeyNames)
+                {
+                    if (!Regex.IsMatch(subKeyName, @"\d{4}"))
+                        continue;
+
+                    using (var subKey = reg.OpenSubKey(subKeyName, true))
+                    {
+                        var instanceId = subKey.GetValue("NetCfgInstanceId");
+
+                        if (instanceId?.Equals(guid) == true)
+                        {
+                            subKey.DeleteSubKey("NetworkAddress");
+
+                            using (var networkAddressKey = subKey.OpenSubKey("Ndi", true).OpenSubKey("Params", true).OpenSubKey("NetworkAddress", true))
+                            {
+                                networkAddressKey.SetValue(string.Empty, string.Empty);
+                            }
+                        }
+                    }
+                }
+            }
+
+            var wmiQuery = new SelectQuery($"SELECT * FROM Win32_NetworkAdapter WHERE GUID='{guid}'");
+
+            var searchProcedure = new ManagementObjectSearcher(wmiQuery);
+
+            foreach (var item in searchProcedure.Get())
+            {
+                var obj = (ManagementObject)item;
+
+                obj.InvokeMethod("Disable", null);
+
+                while (GetCurrentOnlineNetworkInterface() != null)
+                    Thread.Sleep(1000);
+
+                obj.InvokeMethod("Enable", null);
+
+                while (GetCurrentOnlineNetworkInterface() == null)
+                    Thread.Sleep(1000);
+            }
+
+            Console.WriteLine("Current MAC: " + GetCurrentOnlineNetworkInterface().GetPhysicalAddress());
+        }
+
+        private static async Task CheckInternetAsync()
+        {
+            HttpClient client = new HttpClient();
+            client.Timeout = new TimeSpan(0, 0, 10);
+            var response = await client.GetAsync("https://api.ip.pe.kr/");
+            Console.WriteLine(response.Content);
         }
     }
 }
